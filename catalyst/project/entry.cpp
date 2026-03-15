@@ -1,7 +1,12 @@
 #include <stdafx.hpp>
 
+#include <timeapi.h>
+#pragma comment( lib, "winmm.lib" )
+
 int main( )
 {
+	timeBeginPeriod( 1 );
+
 	{
 		if ( !g::console.initialize( " :> " ) )
 		{

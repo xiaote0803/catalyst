@@ -8,7 +8,6 @@ namespace settings {
 		{
 			bool enabled{ true };
 			int key{ VK_XBUTTON2 };
-			int type{ 0 };
 
 			int fov{ 5 };
 			int smoothing{ 5 };
@@ -42,10 +41,19 @@ namespace settings {
 			bool predictive{ true };
 		};
 
+		struct other
+		{
+			bool penetration_crosshair{ true };
+
+			zdraw::rgba penetration_color_yes{ 50, 255, 50, 125 };
+			zdraw::rgba penetration_color_no{ 255, 50, 50, 125 };
+		};
+
 		struct group_config
 		{
 			aimbot aimbot{};
 			triggerbot triggerbot{};
+			other other{};
 		};
 
 		static constexpr std::uint32_t k_group_count{ 6 };
@@ -73,10 +81,10 @@ namespace settings {
 
 			struct box
 			{
-				enum class style0 : std::uint8_t { full, cornered };
+				enum class style_type : std::uint8_t { full, cornered };
 
 				bool enabled{ true };
-				style0 style{ style0::cornered };
+				style_type style{ style_type::cornered };
 				bool fill{ true };
 				bool outline{ true };
 				float corner_length{ 10.0f };
@@ -107,10 +115,10 @@ namespace settings {
 
 			struct health_bar
 			{
-				enum class position : std::uint8_t { left, top, bottom };
+				enum class position_type : std::uint8_t { left, top, bottom };
 
 				bool enabled{ true };
-				position position{ position::left };
+				position_type position{ position_type::left };
 				bool outline{ true };
 				bool gradient{ true };
 				bool show_value{ true };
@@ -124,10 +132,10 @@ namespace settings {
 
 			struct ammo_bar
 			{
-				enum class position : std::uint8_t { left, top, bottom };
+				enum class position_type : std::uint8_t { left, top, bottom };
 
 				bool enabled{ true };
-				position position{ position::bottom };
+				position_type position{ position_type::bottom };
 				bool outline{ true };
 				bool gradient{ true };
 				bool show_value{ false };
@@ -250,28 +258,12 @@ namespace settings {
 		struct grenades
 		{
 			bool enabled{ true };
-
-			zdraw::rgba line_color{ 170, 175, 220, 200 };
-			float line_thickness{ 2.0f };
-			bool line_gradient{ true };
-
-			bool show_bounces{ true };
-			zdraw::rgba bounce_color{ 195, 200, 215, 255 };
-			float bounce_size{ 2.0f };
-
-			zdraw::rgba detonate_color{ 140, 150, 235, 255 };
-			float detonate_size{ 4.0f };
-
-			bool per_type_colors{ false };
-			zdraw::rgba color_he{ 190, 140, 140, 200 };
-			zdraw::rgba color_flash{ 200, 195, 150, 200 };
-			zdraw::rgba color_smoke{ 150, 185, 165, 200 };
-			zdraw::rgba color_molotov{ 195, 155, 130, 200 };
-			zdraw::rgba color_decoy{ 160, 165, 185, 200 };
-
 			bool local_only{ true };
-			float fade_duration{ 0.3f };
+			zdraw::rgba color{ 170, 175, 220, 200 };
 		} m_grenades{};
+
+		bool limit_fps{ true };
+		int fps_limit{ 240 };
 	};
 
 	inline combat g_combat{};

@@ -81,16 +81,16 @@ namespace random {
 		void reset( )
 		{
 			this->m_state[ 0 ] = 0x67452301;
-			this->m_state[ 1 ] = 0xefcdaB89;
-			this->m_state[ 2 ] = 0x98bedcfe;
+			this->m_state[ 1 ] = 0xEFCDAB89;
+			this->m_state[ 2 ] = 0x98BADCFE;
 			this->m_state[ 3 ] = 0x10325476;
-			this->m_state[ 4 ] = 0xc3d2e1f0;
+			this->m_state[ 4 ] = 0xC3D2E1F0;
 			this->m_count = 0;
 		}
 
 		void update( const void* data, std::size_t len )
 		{
-			const auto bytes = static_cast< const std::uint8_t* >( data );
+			const auto* bytes = static_cast< const std::uint8_t* >( data );
 			auto index = static_cast< std::size_t >( this->m_count & 63 );
 
 			this->m_count += len;
@@ -136,7 +136,7 @@ namespace random {
 
 			this->update( padding, pad_len );
 
-			std::uint8_t bits[ 8 ]{};
+			std::uint8_t bits[ 8 ]{ };
 
 			for ( int i = 0; i < 8; ++i )
 			{
@@ -169,7 +169,7 @@ namespace random {
 
 		void transform( const std::uint8_t* block )
 		{
-			std::uint32_t w[ 80 ]{};
+			std::uint32_t w[ 80 ]{ };
 
 			for ( int i = 0; i < 16; ++i )
 			{
@@ -194,22 +194,22 @@ namespace random {
 				if ( i < 20 )
 				{
 					f = ( b & c ) | ( ( ~b ) & d );
-					k = 0x5a827999;
+					k = 0x5A827999;
 				}
 				else if ( i < 40 )
 				{
 					f = b ^ c ^ d;
-					k = 0x6ed9eba1;
+					k = 0x6ED9EBA1;
 				}
 				else if ( i < 60 )
 				{
 					f = ( b & c ) | ( b & d ) | ( c & d );
-					k = 0x8f1bbcdc;
+					k = 0x8F1BBCDC;
 				}
 				else
 				{
 					f = b ^ c ^ d;
-					k = 0xca62c1d6;
+					k = 0xCA62C1D6;
 				}
 
 				auto temp = this->rotl( a, 5 ) + f + e + k + w[ i ];

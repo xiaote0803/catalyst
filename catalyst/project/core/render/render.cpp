@@ -79,14 +79,16 @@ void render::run( )
 
 		zdraw::begin_frame( );
 		{
+			auto& draw_list = zdraw::get_draw_list( zdraw::draw_layer::background );
+
 			if ( systems::g_local.valid( ) )
 			{
 				systems::g_view.update( );
-				features::esp::g_player.on_render( );
-				features::esp::g_item.on_render( );
-				features::esp::g_projectile.on_render( );
-				features::misc::g_grenades.on_render( );
-				features::combat::g_legit.on_render( );
+				features::esp::g_player.on_render( draw_list );
+				features::esp::g_item.on_render( draw_list );
+				features::esp::g_projectile.on_render( draw_list );
+				features::misc::g_grenades.on_render( draw_list );
+				features::combat::g_legit.on_render( draw_list );
 			}
 
 			g::menu.draw( );
@@ -96,6 +98,13 @@ void render::run( )
 		if ( FAILED( this->m_swap_chain->Present( 0, 0 ) ) )
 		{
 			break;
+		}
+
+		if ( settings::g_misc.limit_fps )
+		{
+			static timing::limiter limiter( settings::g_misc.fps_limit );
+			limiter.set_target( settings::g_misc.fps_limit );
+			limiter.limit( );
 		}
 	}
 }

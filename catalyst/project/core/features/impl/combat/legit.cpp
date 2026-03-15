@@ -2,19 +2,25 @@
 
 namespace features::combat {
 
-	void legit::on_render( )
+	void legit::on_render( zdraw::draw_list& draw_list )
 	{
 		const auto eye_pos = systems::g_view.origin( );
 		const auto view_angles = systems::g_view.angles( );
 
 		const auto& ctx = g_shared.ctx( );
+		const auto& cfg = settings::g_combat.get( ctx.weapon_type );
+
 		if ( !ctx.valid )
 		{
 			return;
 		}
 
 		const auto valid_weapon = cstypes::is_weapon_valid( ctx.weapon_type );
-		const auto& cfg = settings::g_combat.get( ctx.weapon_type );
+
+		if ( valid_weapon && cfg.other.penetration_crosshair )
+		{
+			this->draw_penetration_crosshair( draw_list, eye_pos, view_angles, cfg );
+		}
 
 		this->m_fov_alpha.set_target( valid_weapon && cfg.aimbot.draw_fov && cfg.aimbot.enabled ? 1.0f : 0.0f );
 		this->m_fov_alpha.update( );
@@ -24,7 +30,7 @@ namespace features::combat {
 			return;
 		}
 
-		this->draw_fov( eye_pos, view_angles, cfg.aimbot );
+		this->draw_fov( draw_list, eye_pos, view_angles, cfg.aimbot );
 	}
 
 	void legit::tick( )
@@ -224,7 +230,75 @@ namespace features::combat {
 		return std::sqrtf( dx * dx + dy * dy );
 	}
 
-	void legit::draw_fov( const math::vector3& eye_pos, const math::vector3& view_angles, const settings::combat::aimbot& cfg )
+	void legit::draw_penetration_crosshair( zdraw::draw_list& draw_list, const math::vector3& eye_pos, const math::vector3& view_angles, const settings::combat::group_config& cfg )
+	{
+		math::vector3 forward{};
+		view_angles.to_directions( &forward, nullptr, nullptr );
+
+		const auto first_hit = systems::g_bvh.trace_ray( eye_pos, eye_pos + forward * g_shared.pen( ).get_weapon_data( ).range );
+		if ( !first_hit.hit )
+		{
+			return;
+		}
+
+		auto pen_damage{ 0.0f };
+		const auto can_pen = g_shared.pen( ).can( eye_pos, forward, pen_damage );
+
+		const auto& n = first_hit.normal;
+		const auto ref = ( std::abs( n.z ) < 0.9f ) ? math::vector3{ 0.0f, 0.0f, 1.0f } : math::vector3{ 1.0f, 0.0f, 0.0f };
+
+		const auto d = ref.dot( n );
+		const auto tangent = ( ref - n * d ).normalized( );
+		const auto bitangent = n.cross( tangent );
+
+		const auto center = first_hit.end_pos + n * 0.05f;
+		constexpr auto half_size{ 3.5f };
+
+		const math::vector3 corners[ 4 ]
+		{
+			center - tangent * half_size - bitangent * half_size,
+			center + tangent * half_size - bitangent * half_size,
+			center + tangent * half_size + bitangent * half_size,
+			center - tangent * half_size + bitangent * half_size,
+		};
+
+		float sx[ 5 ]{}, sy[ 5 ]{};
+
+		for ( int i = 0; i < 4; ++i )
+		{
+			const auto proj = systems::g_view.project( corners[ i ] );
+			if ( !systems::g_view.projection_valid( proj ) )
+			{
+				return;
+			}
+
+			sx[ i ] = proj.x;
+			sy[ i ] = proj.y;
+		}
+
+		const auto center_proj = systems::g_view.project( center );
+		if ( !systems::g_view.projection_valid( center_proj ) )
+		{
+			return;
+		}
+
+		sx[ 4 ] = center_proj.x;
+		sy[ 4 ] = center_proj.y;
+
+		const auto& color = can_pen ? cfg.other.penetration_color_yes : cfg.other.penetration_color_no;
+		const auto edge = zdraw::rgba{ color.r, color.g, color.b, static_cast< std::uint8_t >( color.a / 4 ) };
+
+		for ( int i = 0; i < 4; ++i )
+		{
+			const auto j = ( i + 1 ) % 4;
+			draw_list.add_triangle_filled_multi_color( sx[ 4 ], sy[ 4 ], sx[ i ], sy[ i ], sx[ j ], sy[ j ], color, edge, edge );
+		}
+
+		float screen[ 8 ]{ sx[ 0 ], sy[ 0 ], sx[ 1 ], sy[ 1 ], sx[ 2 ], sy[ 2 ], sx[ 3 ], sy[ 3 ] };
+		draw_list.add_polyline( { screen, 8 }, { color.r, color.g, color.b, 255 }, true, 1.0f );
+	}
+
+	void legit::draw_fov( zdraw::draw_list& draw_list, const math::vector3& eye_pos, const math::vector3& view_angles, const settings::combat::aimbot& cfg )
 	{
 		const auto target_radius = this->get_fov_radius( eye_pos, view_angles, static_cast< float >( cfg.fov ) );
 		const auto alpha = this->m_fov_alpha.value( );
@@ -238,7 +312,7 @@ namespace features::combat {
 		const auto [w, h] = zdraw::get_display_size( );
 		const auto color = zdraw::rgba{ cfg.fov_color.r, cfg.fov_color.g, cfg.fov_color.b, static_cast< std::uint8_t >( alpha * 125.0f ) };
 
-		zdraw::circle( w * 0.5f, h * 0.5f, radius, color, 16 );
+		draw_list.add_circle( w * 0.5f, h * 0.5f, radius, color, 16 );
 	}
 
 	void legit::aimbot( const math::vector3& eye_pos, const math::vector3& view_angles, const target& tgt, const settings::combat::aimbot& cfg )
@@ -349,43 +423,27 @@ namespace features::combat {
 					continue;
 				}
 
-				const auto raw_center = bones.get_position( hb.bone );
-				const auto center = raw_center + velocity * prediction_time;
-				const auto radius = hb.radius > 0.0f ? hb.radius : 3.5f;
+				const auto bone_pos = bones.get_position( hb.bone );
+				const auto bone_rot = bones.get_rotation( hb.bone );
 
-				const auto oc = eye_pos - center;
-				const auto a = forward.dot( forward );
-				const auto b = 2.0f * oc.dot( forward );
-				const auto c = oc.dot( oc ) - radius * radius;
-				const auto discriminant = b * b - 4.0f * a * c;
+				const auto capsule_start = bone_pos + bone_rot.rotate_vector( hb.mins ) + velocity * prediction_time;
+				const auto capsule_end = bone_pos + bone_rot.rotate_vector( hb.maxs ) + velocity * prediction_time;
+				const auto radius = ( hb.radius > 0.0f ? hb.radius : 3.5f ) * 0.85f;
 
-				if ( discriminant < 0.0f )
+				if ( !g_shared.ray_hits_capsule( eye_pos, forward, capsule_start, capsule_end, radius ) )
 				{
 					continue;
 				}
 
-				const auto sqrt_d = std::sqrtf( discriminant );
-				auto t = ( -b - sqrt_d ) / ( 2.0f * a );
-
-				if ( t < 0.0f )
-				{
-					t = ( -b + sqrt_d ) / ( 2.0f * a );
-				}
-
-				if ( t < 0.0f || t > max_range )
-				{
-					continue;
-				}
-
-				const auto hit_pos = eye_pos + forward * t;
-				const auto dist_sq = ( hit_pos - eye_pos ).length_sqr( );
+				const auto capsule_center = ( capsule_start + capsule_end ) * 0.5f;
+				const auto dist_sq = ( capsule_center - eye_pos ).length_sqr( );
 
 				if ( dist_sq >= best_dist_sq )
 				{
 					continue;
 				}
 
-				const auto vis_trace = systems::g_bvh.trace_ray( eye_pos, center );
+				const auto vis_trace = systems::g_bvh.trace_ray( eye_pos, capsule_center );
 				const auto visible = !vis_trace.hit || vis_trace.fraction > 0.97f;
 
 				if ( visible )
@@ -404,7 +462,7 @@ namespace features::combat {
 				else if ( cfg.autowall )
 				{
 					shared::penetration::result pen_result{};
-					if ( combat::g_shared.pen( ).run( eye_pos, center, player, bones, pen_result ) )
+					if ( combat::g_shared.pen( ).run( eye_pos, capsule_center, player, bones, pen_result ) )
 					{
 						if ( pen_result.damage >= cfg.min_damage )
 						{
@@ -459,8 +517,7 @@ namespace features::combat {
 		if ( cfg.autostop && cfg.early_autostop && on_ground && is_moving )
 		{
 			constexpr auto lookahead_ticks{ 4 };
-			constexpr auto tick_interval{ 0.015625f };
-			const auto lookahead_pos = eye_pos + math::vector3{ velocity.x * tick_interval * lookahead_ticks, velocity.y * tick_interval * lookahead_ticks, 0.0f };
+			const auto lookahead_pos = eye_pos + math::vector3{ velocity.x * cstypes::tick_interval * lookahead_ticks, velocity.y * cstypes::tick_interval * lookahead_ticks, 0.0f };
 
 			trace_pos = g_shared.extrapolate_stop( lookahead_pos );
 
